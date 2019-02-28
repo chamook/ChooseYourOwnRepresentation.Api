@@ -48,12 +48,16 @@ let configureServices (services : IServiceCollection) =
     |> services.AddSingleton<INegotiationConfig>
     |> ignore
 
+let configureLogging (builder : ILoggingBuilder) =
+    builder.AddConsole() |> ignore
+
 [<EntryPoint>]
 let main _ =
     WebHostBuilder()
         .UseKestrel()
         .Configure(Action<IApplicationBuilder> configureApp)
         .ConfigureServices(configureServices)
+        .ConfigureLogging(configureLogging)
         .Build()
         .Run()
     0
