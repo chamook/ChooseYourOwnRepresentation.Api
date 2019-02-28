@@ -3,6 +3,10 @@ module Api
 open System
 open Giraffe
 open Microsoft.AspNetCore.Http
+open System.Text.RegularExpressions
+open Newtonsoft.Json
+open Newtonsoft.Json.Linq
+open Microsoft.FSharp.Reflection
 
 type Colour = {
     Id   : string
@@ -14,14 +18,13 @@ type Colour = {
 and RGB = { Red : int; Green : int; Blue : int }
 and HSL = { Hue : int; Saturation : int; Lightness : int }
 
-type MyColoursDto = { Colours : Colour list }
+let tryGetPropertyName<'a> propertyName =
+    FSharpType.GetRecordFields typeof<'a>
+    |> Array.tryFind
+        (fun x -> String.Equals(x.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+    |> Option.map (fun x -> x.Name)
 
-type MiniColour = {
-    Id   : string
-    Name : string
-    Hex  : string
-}
-type MiniMyColoursDto = { Colours : MiniColour list }
+type MyColoursDto = { Colours : Colour list }
 
 let myColours = [
     { Id   = "abc123"
@@ -36,19 +39,41 @@ let myColours = [
       HSL  = { Hue = 60; Saturation = 100; Lightness = 50 } }
     ]
 
-let toMiniColour (c : Colour) = { MiniColour.Id = c.Id; Name = c.Name; Hex = c.Hex }
+let includingRegex = Regex("including=(.*?)(\Z|\0)")
+
+let (|FilteredRepresentation|_|) (accept : string option) =
+    match accept with
+    | Some a
+        when a.StartsWith "application/vnd.chamook.api+json"
+            && a.Contains "including=" ->
+                includingRegex.Match(a).Groups.[1].Captures.[0].Value.Split ','
+                |> Array.map tryGetPropertyName<Colour>
+                |> Array.choose id
+                |> Array.toList
+                |> Some
+    | _ -> None
+
+let filterJson (includeFields : string list) (original : JObject) =
+    let json = JObject()
+    includeFields
+    |> List.iter (fun name -> json.[name] <- original.[name])
+    json
 
 let getMyColours: HttpHandler =
     fun next ctx ->
         match ctx.TryGetRequestHeader "Accept" with
-        | Some x when x.Contains "application/vnd.chamook.mini-colours+json" ->
+        | FilteredRepresentation filter ->
+            let response = JObject()
+            let colourArray =
+                myColours
+                |> List.map (JObject.FromObject >> filterJson filter)
+            response.["colours"] <- JArray(colourArray)
             Successful.OK
-                { MiniMyColoursDto.Colours = myColours |> List.map toMiniColour }
+                response
                 next
                 ctx
         | _ ->
             Successful.OK
-                { MyColoursDto.Colours = myColours }
+                { Colours = myColours }
                 next
                 ctx
-

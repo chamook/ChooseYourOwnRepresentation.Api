@@ -29,8 +29,8 @@ type CustomNegotiationConfig (baseConfig : INegotiationConfig) =
             dict [
                 "*/*" , json
                 "application/json" , json
-                "application/vnd.chamook.mini-colours+json",
-                customJsonContentType "application/vnd.chamook.mini-colours+json"
+                "application/vnd.chamook.api+json",
+                customJsonContentType "application/vnd.chamook.api+json"
                 ]
 
 let webApp =
